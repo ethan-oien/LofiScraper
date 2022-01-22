@@ -1,0 +1,18 @@
+{
+  "name": "lofi-scraper",
+  "version": "1.0.0",
+  "description": "App to consolidate all the lofi beats songs in one playlist",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ethan Oien",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.25.0",
+    "express": "^4.17.2",
+    "keytar": "^7.7.0",
+    "open": "^8.4.0"
+  }
+}
