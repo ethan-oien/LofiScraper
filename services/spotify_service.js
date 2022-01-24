@@ -1,5 +1,5 @@
 const axios = require('axios').default;
-const { api_base_uri } = require('../environment_variables');
+const { api_base_uri } = require('../spotify_variables.json');
 
 const rate_limit_exceeded_status = 429;
 

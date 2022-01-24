@@ -3,7 +3,8 @@ const open = require('open');
 const axios = require('axios').default;
 const keytar = require('keytar');
 const os = require('os');
-const { client_id, client_secret, redirect_uri, scopes, authorization_endpoint, token_endpoint } = require('../environment_variables');
+const { client_id, client_secret } = require('../environment_variables.json');
+const { redirect_uri, scopes, authorization_endpoint, token_endpoint } = require('../spotify_variables.json');
 
 const keytarService = 'LofiScraper';
 const keytarAccount = os.userInfo().username;
@@ -45,7 +46,7 @@ async function refresh_tokens()
     });
 }
 
-async function load_tokens(code, state, callback)
+async function load_tokens(code, state)
 {
     return new Promise(async (resolve, reject) => {
         const sta = await global_state;

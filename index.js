@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 const path = require('path');
-const { port, lofi_playlist_id, my_playlist_id } = require('./environment_variables')
+const { port, lofi_playlist_id, my_playlist_id } = require('./environment_variables.json')
 const { refresh_tokens, load_tokens } = require('./services/auth_service');
 const { get_playlist_track_ids, add_tracks_to_playlist } = require('./services/spotify_service');
 
