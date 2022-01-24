@@ -1,5 +1,4 @@
 {
-    "redirect_uri": "https://localhost:3000/callback",
     "authorization_endpoint": "https://accounts.spotify.com/authorize",
     "token_endpoint": "https://accounts.spotify.com/api/token",
     "api_base_uri": "https://api.spotify.com/",
