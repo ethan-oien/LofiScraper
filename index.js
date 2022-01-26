@@ -55,41 +55,21 @@ async function main_flow(access_token)
 {
     const check_new_songs = async () => {
         console.log('Checking playlist for new content...');
-        let tracks = await get_playlist_track_ids(access_token, lofi_playlist_id)
-        .catch((err) => {
-            if(err.response.status == bad_token_status) {
-                refresh();
-            } else {
-                console.error(err);
-            }
-        });
+        let tracks
+        tracks = await get_playlist_track_ids(access_token, lofi_playlist_id);
 
-        let cur_tracks = await get_playlist_track_ids(access_token, my_playlist_id)
-        .catch((err) => {
-            if(err.response.status == bad_token_status) {
-                refresh();
-            } else {
-                console.error(err);
-            }
-        });
+        let cur_tracks = await get_playlist_track_ids(access_token, my_playlist_id);
 
         let not_intersection = new Set;
         for (let elem of tracks) {
             if (!cur_tracks.has(elem)) {
-                not_intersection.add(elem)
+                not_intersection.add(elem);
             }
         }
 
         if(not_intersection.size != 0) {
             console.log('Found new tracks! Adding them to your playlist...')
-            await add_tracks_to_playlist(access_token, my_playlist_id, not_intersection)
-            .catch((err) => {
-                if(err.response.status == bad_token_status) {
-                    refresh();
-                } else {
-                    console.error(err);
-                }
-            });
+            await add_tracks_to_playlist(access_token, my_playlist_id, not_intersection);
         }
 
         server.close(() => {
@@ -105,9 +85,23 @@ async function main_flow(access_token)
     if(!server) {
         server = app.listen(port, () => {
             console.log(`Web server listening on port ${port}.`);
-            check_new_songs();
+            check_new_songs()
+            .catch((err) => {
+                if(err.response.status == bad_token_status) {
+                    refresh();
+                } else {
+                    console.error(err);
+                }
+            });
         });
     } else {
-        check_new_songs();
+        check_new_songs()
+        .catch((err) => {
+            if(err.response.status == bad_token_status) {
+                refresh();
+            } else {
+                console.error(err);
+            }
+        });
     }
 }
