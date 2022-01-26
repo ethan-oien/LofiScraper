@@ -7,7 +7,7 @@ const { get_playlist_track_ids, add_tracks_to_playlist } = require('./services/s
 
 const bad_token_status = 401;
 
-const check_ms_interval = 7200000;
+const check_ms_interval = 7200000/2;
 //const check_ms_interval = 10000;
 let server = null;
 
@@ -36,30 +36,28 @@ app.get('*', (req, res) => {
     res.sendStatus(404);
 });
 
-server = app.listen(port, async () => {
+server = app.listen(port, () => {
     console.log(`Web server listening on port ${port}.`);
+    refresh();
+});
+
+function refresh()
+{
+    console.log("Refreshing access token...");
     refresh_tokens()
     .then((token) => { main_flow(token); })
-    .catch((err) => {
+    .catch(() => {
         console.error(err);
     });
-});
+};
 
 async function main_flow(access_token)
 {
     const check_new_songs = async () => {
-        const refresh = () => {
-            refresh_tokens()
-            .then((token) => { main_flow(token); })
-            .catch(() => {
-                console.error(err);
-            });
-        };
-
         console.log('Checking playlist for new content...');
         let tracks = await get_playlist_track_ids(access_token, lofi_playlist_id)
         .catch((err) => {
-            if(err.status == bad_token_status) {
+            if(err.response.status == bad_token_status) {
                 refresh();
             } else {
                 console.error(err);
@@ -68,7 +66,7 @@ async function main_flow(access_token)
 
         let cur_tracks = await get_playlist_track_ids(access_token, my_playlist_id)
         .catch((err) => {
-            if(err.status == bad_token_status) {
+            if(err.response.status == bad_token_status) {
                 refresh();
             } else {
                 console.error(err);
@@ -86,7 +84,7 @@ async function main_flow(access_token)
             console.log('Found new tracks! Adding them to your playlist...')
             await add_tracks_to_playlist(access_token, my_playlist_id, not_intersection)
             .catch((err) => {
-                if(err.status == bad_token_status) {
+                if(err.response.status == bad_token_status) {
                     refresh();
                 } else {
                     console.error(err);
