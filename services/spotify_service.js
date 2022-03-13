@@ -43,9 +43,10 @@ async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
     let track_list = Array.from(tracks);
 
     const do_iteration = async (url, track_sublist) => {
+        let track_sublist_mutable = track_sublist;
         uris = [];
         for(let i=0;i<100;i++) { //spotify track insertion limit
-            let track = track_sublist.pop();
+            let track = track_sublist_mutable.pop();
             if(!track) {
                 break;
             }
@@ -66,16 +67,16 @@ async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
                 const retry_after = response.headers['Retry-After'] + 1;
                 return new Promise((resolve, reject) => {
                     setTimeout(() => {
-                        resolve(do_iteration(url));
+                        resolve(do_iteration(url, track_sublist));
                     }, retry_after);
                 });
             } else throw response.error;
         }
         
-        if(track_sublist.length == 0) {
+        if(track_sublist_mutable.length == 0) {
             return;
         } else {
-            return do_iteration(url, track_sublist)
+            return do_iteration(url, track_sublist_mutable)
         }
     }
 
