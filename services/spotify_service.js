@@ -1,48 +1,56 @@
 const axios = require('axios').default;
+const { response } = require('express');
 const { api_base_uri } = require('../spotify_variables.json');
+const { max_tries, default_retry_time_s } = require('../environment_variables.json');
+const { refresh_tokens } = require("./auth_service");
 
-const rate_limit_exceeded_status = 429;
+const spotify_bad_token_status = 401;
+const spotify_bad_oath_request_status = 403;
+const spotify_rate_limit_exceeded_status = 429;
 
-async function get_playlist_track_ids(access_token, playlist_id) {
+async function get_playlist_tracks(access_token, playlist_id) {
     let tracks = new Set;
 
-    const do_iteration = async (url) => {
-        const response = await axios.get(url, {
-            headers: {
-                'Authorization': `Bearer ${access_token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if(response.error) {
-            if(response.error.status == rate_limit_exceeded_status) {
-                const retry_after = response.headers['Retry-After'] + 1;
-                return new Promise((resolve, reject) => {
-                    setTimeout(() => {
-                        resolve(do_iteration(url));
-                    }, retry_after);
-                });
-            } else throw response.error;
+    const do_iteration = async (url, tries) => {
+        if(tries > max_tries) {
+            return null;
         }
-    
+
+        let response;
+        try {
+            response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch(error) {
+            return check_error(error, do_iteration(url, tries+1));
+        }
+
         response.data.items.forEach(element => {
-            tracks.add(element.track.id);
+            tracks.add(element.track);
         });
 
         const next = response.data.next;
         
-        if(next) return do_iteration(next);
+        if(next) return do_iteration(next, 0);
     
         return tracks;
     }
 
-    return do_iteration(`${api_base_uri}v1/playlists/${playlist_id}/tracks`);
+    return do_iteration(`${api_base_uri}v1/playlists/${playlist_id}/tracks`, 0);
 }
 
 async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
     let track_list = Array.from(tracks);
+    const url = `${api_base_uri}v1/playlists/${playlist_id}/tracks`;
 
-    const do_iteration = async (url, track_sublist) => {
+    const do_iteration = async (track_sublist, tries) => {
+        if(tries > max_tries) {
+            return 1;
+        }
+
         let track_sublist_mutable = track_sublist;
         uris = [];
         for(let i=0;i<100;i++) { //spotify track insertion limit
@@ -53,37 +61,97 @@ async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
             uris.push('spotify:track:' + track);
         }
         
-        const response = await axios.post(url, {
-            uris
-        }, {
-            headers: {
-                'Authorization': `Bearer ${access_token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if(response.error) {
-            if(response.error.status == rate_limit_exceeded_status) {
-                const retry_after = response.headers['Retry-After'] + 1;
-                return new Promise((resolve, reject) => {
-                    setTimeout(() => {
-                        resolve(do_iteration(url, track_sublist));
-                    }, retry_after);
-                });
-            } else throw response.error;
+        try {
+            await axios.post(url, {
+                uris
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch(error) {
+            return check_error(error, do_iteration(track_sublist, tries+1));
         }
         
         if(track_sublist_mutable.length == 0) {
-            return;
+            return 0;
         } else {
-            return do_iteration(url, track_sublist_mutable)
+            return do_iteration(track_sublist_mutable, 0);
         }
     }
 
-    return do_iteration(`${api_base_uri}v1/playlists/${playlist_id}/tracks`, track_list);
+    return do_iteration(track_list, 0);
+}
+
+async function set_playlist_name(access_token, playlist_id, new_name) {
+    const url = `${api_base_uri}v1/playlists/${playlist_id}`;
+
+    const do_iteration = async (tries) => {
+        if(tries > max_tries) {
+            return 1;
+        }
+
+        try {
+            await axios.put(url, {
+                "name": new_name
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } catch(error) {
+            return check_error(error, do_iteration(tries+1));
+        }
+
+        return 0;
+    }
+
+    return do_iteration(0);
+}
+
+async function check_error(error, callback) {
+    const retry_after = default_retry_time_s;
+
+    const retry = async (retry_timeout, callback) => {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve(callback());
+            }, retry_timeout);
+        });
+    }
+
+    if(error.response) {
+        switch(error.response.status) {
+            case spotify_bad_token_status:
+                console.log("Bad token, reauthenticating user...");
+                return await refresh_tokens()
+
+                break;
+            case spotify_bad_oath_request_status:
+                console.error("Bad OAuth request! Are your environment variables set correctly?");
+                throw response.error;
+            case spotify_rate_limit_exceeded_status:
+                retry_after = error.response.headers['Retry-After'] + 1;
+                console.log(`Rate limit reached, retrying in ${retry_after} seconds...`);
+                return retry(retry_after, callback);
+            default:
+                console.error("An unknown error was found in Spotify API response!");
+                throw response.error;
+        }
+    } else if(error.request) {
+        console.log(`Unable to send request, retrying in ${retry_after} seconds...`)
+        return retry(retry_after, callback)
+    } else {
+        console.error("An unknown error has occurred!");
+        throw error.message;
+    }
 }
 
 module.exports = {
-    get_playlist_track_ids,
-    add_tracks_to_playlist
+    get_playlist_tracks,
+    add_tracks_to_playlist,
+    set_playlist_name,
+    check_error
 }
