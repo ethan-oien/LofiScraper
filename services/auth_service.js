@@ -10,10 +10,20 @@ const keytarService = 'LofiScraper';
 const keytarAccount = os.userInfo().username;
 
 const global_state = generate_state();
+let access_token = undefined;
+
+async function get_access_token()
+{
+    if(!access_token) {
+        access_token = await refresh_tokens();
+    }
+
+    return access_token;
+}
 
 async function refresh_tokens()
 {
-    return new Promise(async (resolve, reject) => {
+    token = new Promise(async (resolve, reject) => {
         const refresh_token = await keytar.getPassword(keytarService, keytarAccount);
 
         if(refresh_token) {
@@ -44,11 +54,14 @@ async function refresh_tokens()
             reject('No refresh token!');
         }
     });
+
+    access_token = token;
+    return token;
 }
 
 async function load_tokens(code, state)
 {
-    return new Promise(async (resolve, reject) => {
+    token = new Promise(async (resolve, reject) => {
         const sta = await global_state;
         if(sta != state) {
             logout();
@@ -78,6 +91,9 @@ async function load_tokens(code, state)
             resolve(res.data.access_token);
         });
     });
+    
+    access_token = token;
+    return token;
 }
 
 async function logout()
@@ -115,6 +131,7 @@ async function generate_state()
 }
 
 module.exports = {
+    get_access_token,
     refresh_tokens,
     load_tokens
 }

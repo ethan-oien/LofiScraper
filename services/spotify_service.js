@@ -1,20 +1,22 @@
 const axios = require('axios').default;
 const { response } = require('express');
-const { api_base_uri } = require('../spotify_variables.json');
+const { api_base_uri, spotify_item_limit } = require('../spotify_variables.json');
 const { max_tries, default_retry_time_s } = require('../environment_variables.json');
-const { refresh_tokens } = require("./auth_service");
+const { get_access_token, refresh_tokens } = require("./auth_service");
 
 const spotify_bad_token_status = 401;
 const spotify_bad_oath_request_status = 403;
 const spotify_rate_limit_exceeded_status = 429;
 
-async function get_playlist_tracks(access_token, playlist_id) {
+async function get_playlist_tracks(playlist_id) {
     let tracks = new Set;
 
     const do_iteration = async (url, tries) => {
         if(tries > max_tries) {
             return null;
         }
+
+        access_token = await get_access_token();
 
         let response;
         try {
@@ -42,7 +44,7 @@ async function get_playlist_tracks(access_token, playlist_id) {
     return do_iteration(`${api_base_uri}v1/playlists/${playlist_id}/tracks`, 0);
 }
 
-async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
+async function add_tracks_to_playlist(playlist_id, tracks) {
     let track_list = Array.from(tracks);
     const url = `${api_base_uri}v1/playlists/${playlist_id}/tracks`;
 
@@ -53,13 +55,15 @@ async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
 
         let track_sublist_mutable = track_sublist;
         uris = [];
-        for(let i=0;i<100;i++) { //spotify track insertion limit
+        for(let i=0;i<spotify_item_limit;i++) {
             let track = track_sublist_mutable.pop();
             if(!track) {
                 break;
             }
             uris.push('spotify:track:' + track);
         }
+        
+        access_token = await get_access_token();
         
         try {
             await axios.post(url, {
@@ -84,13 +88,15 @@ async function add_tracks_to_playlist(access_token, playlist_id, tracks) {
     return do_iteration(track_list, 0);
 }
 
-async function set_playlist_name(access_token, playlist_id, new_name) {
+async function set_playlist_name(playlist_id, new_name) {
     const url = `${api_base_uri}v1/playlists/${playlist_id}`;
 
     const do_iteration = async (tries) => {
         if(tries > max_tries) {
             return 1;
         }
+
+        access_token = await get_access_token();
 
         try {
             await axios.put(url, {
@@ -126,9 +132,8 @@ async function check_error(error, callback) {
         switch(error.response.status) {
             case spotify_bad_token_status:
                 console.log("Bad token, reauthenticating user...");
-                return await refresh_tokens()
-
-                break;
+                await refresh_tokens()
+                return callback();
             case spotify_bad_oath_request_status:
                 console.error("Bad OAuth request! Are your environment variables set correctly?");
                 throw response.error;
