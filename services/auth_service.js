@@ -9,6 +9,9 @@ const { scopes, authorization_endpoint, token_endpoint } = require('../spotify_v
 const keytarService = 'LofiScraper';
 const keytarAccount = os.userInfo().username;
 
+const not_found_status = 404; //used when no refresh token
+const conflict_status = 409; //used when state doesn't match
+
 const global_state = generate_state();
 let access_token = undefined;
 
@@ -45,13 +48,15 @@ async function refresh_tokens()
                 }
         
                 resolve(res.data.access_token);
+            }).catch((err) => {
+                reject(err);
             });
         } else {
             construct_url(scopes).then((url) => {
                 open(url);
             });
 
-            reject('No refresh token!');
+            reject(not_found_status);
         }
     });
 
@@ -65,7 +70,7 @@ async function load_tokens(code, state)
         const sta = await global_state;
         if(sta != state) {
             logout();
-            reject("State does not match!");
+            reject(conflict_status);
         }
 
         const data = {
@@ -89,6 +94,8 @@ async function load_tokens(code, state)
             keytar.setPassword(keytarService, keytarAccount, res.data.refresh_token);
 
             resolve(res.data.access_token);
+        }).catch((err) => {
+            reject(err);
         });
     });
     
@@ -133,5 +140,7 @@ async function generate_state()
 module.exports = {
     get_access_token,
     refresh_tokens,
-    load_tokens
+    load_tokens,
+    not_found_status,
+    conflict_status
 }

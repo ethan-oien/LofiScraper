@@ -4,7 +4,7 @@ const path = require('path');
 const { sprintf } = require('sprintf-js');
 const { port, lofi_playlist_id, my_playlist_id, playlist_name, check_interval_ms,
     max_tries, default_retry_time_s,  } = require('./environment_variables.json')
-const { refresh_tokens, load_tokens } = require('./services/auth_service');
+const { refresh_tokens, load_tokens, not_found_status, conflict_status } = require('./services/auth_service');
 const { get_playlist_tracks, add_tracks_to_playlist, set_playlist_name } = require('./services/spotify_service');
 
 let server = null;
@@ -26,7 +26,13 @@ app.get('/callback', (req, res) => {
         });
         load_tokens(code, state)
         .then(() => { main_flow() })
-        .catch((err) => { console.error(err); });
+        .catch((err) => {
+            if(err == conflict_status) {
+                console.error("State doesn't match!");
+            } else {
+                console.error(err);
+            }
+        });
     }
 });
 
@@ -45,10 +51,12 @@ function refresh()
         try {
             refresh_tokens()
             .then(() => { main_flow(); });
-            //THIS SHIT DONT WORK
-            //GENERAL ERROR CATCHING, DOESNT ACCOUNT FOR NO REFRESH TOKEN
-            //THIS SHOULD GO TO LOAD TOKENS INSTEAD OF RETRYING
         } catch(err) {
+            if(err == not_found_status) {
+                console.log("No refresh token found!");
+                return 1;
+            }
+
             retry = async () => new Promise((resolve, reject) => {
                 setTimeout(() => {
                     resolve(do_iteration(tries+1));
@@ -130,27 +138,13 @@ async function main_flow()
         });
     }
 
-    const check_error = (err) => {
-        if(err.response) {
-            if(err.response.status == bad_token_status) {
-                refresh();
-            } else {
-                console.error(err);
-            }
-        } else {
-            console.error(err);
-        }
-    }
-
     if(!server) {
         server = app.listen(port, () => {
             console.log(`Web server listening on port ${port}.`);
-            check_new_songs()
-            .catch((err) => { check_error(err) });
+            check_new_songs();
         });
     } else {
-        check_new_songs()
-        .catch((err) => { check_error(err) });
+        check_new_songs();
     }
 }
 
