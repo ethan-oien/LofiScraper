@@ -8,5 +8,5 @@
     "playlist_name": ,
     "check_interval_ms": 3600000,
     "max_tries": 5,
-    "default_retry_time_s": 60 
+    "default_retry_time_ms": 60000
 }

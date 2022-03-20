@@ -3,7 +3,7 @@ const app = express();
 const path = require('path');
 const { sprintf } = require('sprintf-js');
 const { port, lofi_playlist_id, my_playlist_id, playlist_name, check_interval_ms,
-    max_tries, default_retry_time_s,  } = require('./environment_variables.json')
+    max_tries, default_retry_time_ms,  } = require('./environment_variables.json')
 const { refresh_tokens, load_tokens, not_found_status, conflict_status } = require('./services/auth_service');
 const { get_playlist_tracks, add_tracks_to_playlist, set_playlist_name } = require('./services/spotify_service');
 
@@ -40,47 +40,69 @@ app.get('*', (req, res) => {
     res.sendStatus(404);
 });
 
-function refresh()
+async function refresh()
 {
     const do_iteration = async (tries) => {
-        if(tries > max_tries) {
-            return 1;
-        }
-
-        console.log("Refreshing access token...");
-        try {
-            refresh_tokens()
-            .then(() => { main_flow(); });
-        } catch(err) {
-            if(err == not_found_status) {
-                console.log("No refresh token found!");
-                return 1;
+        return new Promise((resolve, reject) => {
+            if(tries >= max_tries) {
+                return reject(1);
             }
-
-            retry = async () => new Promise((resolve, reject) => {
-                setTimeout(() => {
-                    resolve(do_iteration(tries+1));
-                }, default_retry_time_s);
-            });
-
-            const status = await retry();
-
-            if(status != 0) console.error(err);
+    
+            console.log("Refreshing access token...");
             
-            return 0;
-        };
+            refresh_tokens()
+            .then(() => { main_flow(); })
+            .catch(async (err) => {
+                if(err == not_found_status) {
+                    console.log("No refresh token found!");
+                    return resolve(not_found_status);
+                }
+    
+                wait = async (ms) => new Promise((resolve, reject) => {
+                    setTimeout(() => { resolve(); }, ms); });
+
+                await wait(default_retry_time_ms);
+    
+                do_iteration(tries+1)
+                .then((status) => resolve(status))
+                .catch((status) => reject(status));
+            });
+        });
     }
 
-    do_iteration(0);
+    return do_iteration(0);
 };
 
 async function main_flow()
 {
     const check_new_songs = async () => {
+        const close_server = () => {
+            server.close(() => {
+                console.log('Web server closed.');
+                server = null;
+    
+                setTimeout(() => {
+                    main_flow();
+                }, check_interval_ms);
+            });
+        }
+
         console.log('Checking playlist for new content...');
 
         let tracks = await get_playlist_tracks(lofi_playlist_id);
         let cur_tracks = await get_playlist_tracks(my_playlist_id);
+
+        if(!tracks) {
+            console.error("There was a problem fetching the tracks from the other playlist!");
+            close_server();
+            return;
+        }
+
+        if(!cur_tracks) {
+            console.error("There was a problem fetching the tracks from your playlist!");
+            close_server();
+            return;
+        }
         
         let cur_track_ids = new Set;
         for(let elem of cur_tracks) {
@@ -128,14 +150,7 @@ async function main_flow()
             }
         }
 
-        server.close(() => {
-            console.log('Web server closed.');
-            server = null;
-
-            setTimeout(() => {
-                main_flow();
-            }, check_interval_ms);
-        });
+        close_server();
     }
 
     if(!server) {
@@ -150,5 +165,15 @@ async function main_flow()
 
 server = app.listen(port, () => {
     console.log(`Web server listening on port ${port}.`);
-    refresh();
+    refresh().catch(() => {
+        console.error("Unable to refresh access token."); //shit code
+        server.close(() => {
+            console.log('Web server closed.'); 
+            server = null;
+
+            setTimeout(() => {
+                main_flow();
+            }, check_interval_ms);
+        });
+    });
 });

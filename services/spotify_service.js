@@ -1,7 +1,6 @@
 const axios = require('axios').default;
-const { response } = require('express');
 const { api_base_uri, spotify_item_limit } = require('../spotify_variables.json');
-const { max_tries, default_retry_time_s } = require('../environment_variables.json');
+const { max_tries, default_retry_time_ms } = require('../environment_variables.json');
 const { get_access_token, refresh_tokens } = require("./auth_service");
 
 const spotify_bad_token_status = 401;
@@ -27,7 +26,7 @@ async function get_playlist_tracks(playlist_id) {
                 }
             });
         } catch(error) {
-            return check_error(error, do_iteration(url, tries+1));
+            return check_error(error, () => do_iteration(url, tries+1));
         }
 
         response.data.items.forEach(element => {
@@ -75,7 +74,7 @@ async function add_tracks_to_playlist(playlist_id, tracks) {
                 }
             });
         } catch(error) {
-            return check_error(error, do_iteration(track_sublist, tries+1));
+            return check_error(error, () => do_iteration(track_sublist, tries+1));
         }
         
         if(track_sublist_mutable.length == 0) {
@@ -108,7 +107,7 @@ async function set_playlist_name(playlist_id, new_name) {
                 }
             });
         } catch(error) {
-            return check_error(error, do_iteration(tries+1));
+            return check_error(error, () => do_iteration(tries+1));
         }
 
         return 0;
@@ -118,7 +117,7 @@ async function set_playlist_name(playlist_id, new_name) {
 }
 
 async function check_error(error, callback) {
-    const retry_after = default_retry_time_s;
+    const retry_after = default_retry_time_ms;
 
     const retry = async (retry_timeout, callback) => {
         return new Promise((resolve, reject) => {
@@ -132,18 +131,21 @@ async function check_error(error, callback) {
         switch(error.response.status) {
             case spotify_bad_token_status:
                 console.log("Bad token, reauthenticating user...");
-                await refresh_tokens()
+                await refresh_tokens();
                 return callback();
             case spotify_bad_oath_request_status:
                 console.error("Bad OAuth request! Are your environment variables set correctly?");
-                throw response.error;
+                throw error;
             case spotify_rate_limit_exceeded_status:
                 retry_after = error.response.headers['Retry-After'] + 1;
+                const ms_in_s = 1000;
+                retry_after = retry_after * ms_in_s;
                 console.log(`Rate limit reached, retrying in ${retry_after} seconds...`);
                 return retry(retry_after, callback);
             default:
-                console.error("An unknown error was found in Spotify API response!");
-                throw response.error;
+                console.error(`An unknown error was found in Spotify API response! (Code: ${error.response.status})`);
+                return retry(retry_after, callback);
+                //throw error;
         }
     } else if(error.request) {
         console.log(`Unable to send request, retrying in ${retry_after} seconds...`)
