@@ -40,6 +40,31 @@ app.get('*', (req, res) => {
     res.sendStatus(404);
 });
 
+function close_server()
+{
+    server.close(() => {
+        console.log('Web server closed.');
+        server = null;
+
+        setTimeout(() => {
+            main_flow();
+        }, check_interval_ms);
+    });
+}
+
+async function open_server()
+{
+    return new Promise((resolve, reject) => {
+        if(!server) {
+            server = app.listen(port, () => {
+                console.log(`Web server listening on port ${port}.`);
+                resolve();
+            });
+        }
+        resolve();
+    });
+}
+
 async function refresh()
 {
     const do_iteration = async (tries) => {
@@ -54,7 +79,6 @@ async function refresh()
             .then(() => { main_flow(); })
             .catch(async (err) => {
                 if(err == not_found_status) {
-                    console.log("No refresh token found!");
                     return resolve(not_found_status);
                 }
     
@@ -71,22 +95,11 @@ async function refresh()
     }
 
     return do_iteration(0);
-};
+}
 
 async function main_flow()
 {
     const check_new_songs = async () => {
-        const close_server = () => {
-            server.close(() => {
-                console.log('Web server closed.');
-                server = null;
-    
-                setTimeout(() => {
-                    main_flow();
-                }, check_interval_ms);
-            });
-        }
-
         console.log('Checking playlist for new content...');
 
         let tracks = await get_playlist_tracks(lofi_playlist_id);
@@ -153,27 +166,19 @@ async function main_flow()
         close_server();
     }
 
-    if(!server) {
-        server = app.listen(port, () => {
-            console.log(`Web server listening on port ${port}.`);
-            check_new_songs();
-        });
-    } else {
+    open_server().then(() => {
         check_new_songs();
-    }
+    });
 }
 
-server = app.listen(port, () => {
-    console.log(`Web server listening on port ${port}.`);
-    refresh().catch(() => {
-        console.error("Unable to refresh access token."); //shit code
-        server.close(() => {
-            console.log('Web server closed.'); 
-            server = null;
-
-            setTimeout(() => {
-                main_flow();
-            }, check_interval_ms);
-        });
+open_server().then(() => {
+    refresh().catch((err) => {
+        if(err == not_found_status) {
+            console.log("No refresh token found!");
+        } else {
+            console.error("Unable to refresh access token.");
+            
+            close_server();
+        }
     });
 });
