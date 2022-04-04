@@ -1,0 +1,12 @@
+{
+    "port": 3000,
+    "client_id": ,
+    "client_secret": ,
+    "redirect_uri": ,
+    "lofi_playlist_id": "0vvXsWCC9xrXsKd4FyS8kM",
+    "my_playlist_id": ,
+    "playlist_name": ,
+    "check_interval_ms": 3600000,
+    "max_tries": 5,
+    "default_retry_time_ms": 60000
+}

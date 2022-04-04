@@ -9,11 +9,24 @@ const { scopes, authorization_endpoint, token_endpoint } = require('../spotify_v
 const keytarService = 'LofiScraper';
 const keytarAccount = os.userInfo().username;
 
+const not_found_status = 404; //used when no refresh token
+const conflict_status = 409; //used when state doesn't match
+
 const global_state = generate_state();
+let access_token = undefined;
+
+async function get_access_token()
+{
+    if(!access_token) {
+        access_token = await refresh_tokens();
+    }
+
+    return access_token;
+}
 
 async function refresh_tokens()
 {
-    return new Promise(async (resolve, reject) => {
+    token = new Promise(async (resolve, reject) => {
         const refresh_token = await keytar.getPassword(keytarService, keytarAccount);
 
         if(refresh_token) {
@@ -35,24 +48,29 @@ async function refresh_tokens()
                 }
         
                 resolve(res.data.access_token);
+            }).catch((err) => {
+                reject(err);
             });
         } else {
             construct_url(scopes).then((url) => {
                 open(url);
             });
 
-            reject('No refresh token!');
+            reject(not_found_status);
         }
     });
+
+    access_token = token;
+    return token;
 }
 
 async function load_tokens(code, state)
 {
-    return new Promise(async (resolve, reject) => {
+    token = new Promise(async (resolve, reject) => {
         const sta = await global_state;
         if(sta != state) {
             logout();
-            reject("State does not match!");
+            reject(conflict_status);
         }
 
         const data = {
@@ -76,8 +94,13 @@ async function load_tokens(code, state)
             keytar.setPassword(keytarService, keytarAccount, res.data.refresh_token);
 
             resolve(res.data.access_token);
+        }).catch((err) => {
+            reject(err);
         });
     });
+    
+    access_token = token;
+    return token;
 }
 
 async function logout()
@@ -115,6 +138,9 @@ async function generate_state()
 }
 
 module.exports = {
+    get_access_token,
     refresh_tokens,
-    load_tokens
+    load_tokens,
+    not_found_status,
+    conflict_status
 }
