@@ -1,16 +1,14 @@
 const { promisify } = require('util');
 const open = require('open');
 const axios = require('axios').default;
-const keytar = require('keytar');
-const os = require('os');
+const storage_service = require('./storage_service')
 const { client_id, client_secret, redirect_uri } = require('../environment_variables.json');
 const { scopes, authorization_endpoint, token_endpoint } = require('../spotify_variables.json');
 
-const keytarService = 'LofiScraper';
-const keytarAccount = os.userInfo().username;
-
 const not_found_status = 404; //used when no refresh token
 const conflict_status = 409; //used when state doesn't match
+
+const key_name = 'LofiScraper';
 
 const global_state = generate_state();
 let access_token = undefined;
@@ -27,7 +25,7 @@ async function get_access_token()
 async function refresh_tokens()
 {
     token = new Promise(async (resolve, reject) => {
-        const refresh_token = await keytar.getPassword(keytarService, keytarAccount);
+        const refresh_token = await storage_service.get_value(key_name);
 
         if(refresh_token) {
             const data = {
@@ -91,7 +89,7 @@ async function load_tokens(code, state)
                 reject(res);
             }
 
-            keytar.setPassword(keytarService, keytarAccount, res.data.refresh_token);
+            storage_service.set_value(key_name, res.data.refresh_token);
 
             resolve(res.data.access_token);
         }).catch((err) => {
@@ -105,7 +103,7 @@ async function load_tokens(code, state)
 
 async function logout()
 {
-    await keytar.deletePassword(keytarService, keytarAccount);
+    storage_service.clear_value(key_name);
     access_token = null;
 }
 
