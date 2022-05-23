@@ -41,28 +41,26 @@ app.get('*', (req, res) => {
     res.sendStatus(404);
 });
 
-function close_server()
+async function close_server()
 {
-    server.close(() => {
-        console.log('Web server closed.');
-        server = null;
-
-        setTimeout(() => {
-            main_flow();
-        }, check_interval_ms);
+    return new Promise((resolve, reject) => {
+        if(!server) return resolve();
+        server.close(() => {
+            console.log('Web server closed.');
+            server = null;
+            resolve();
+        });
     });
 }
 
 async function open_server()
 {
     return new Promise((resolve, reject) => {
-        if(!server) {
-            server = app.listen(port, () => {
-                console.log(`Web server listening on port ${port}.`);
-                resolve();
-            });
-        }
-        resolve();
+        if(server) return resolve();
+        server = app.listen(port, () => {
+            console.log(`Web server listening on port ${port}.`);
+            resolve();
+        });
     });
 }
 
@@ -164,7 +162,11 @@ async function main_flow()
             }
         }
 
-        close_server();
+        close_server().then(() => {
+            setTimeout(() => {
+                main_flow();
+            }, check_interval_ms);
+        });
     }
 
     open_server().then(() => {
